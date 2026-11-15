@@ -17,6 +17,9 @@ services:
     ports:
       - "8080:8000"
     environment:
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-resend}
+      GOOGLE_MAIL_URL: ${GOOGLE_MAIL_URL:-}
+      GOOGLE_MAIL_SECRET: ${GOOGLE_MAIL_SECRET:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-}
       PUBLIC_URL: ${PUBLIC_URL:-}

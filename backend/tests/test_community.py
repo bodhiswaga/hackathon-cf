@@ -99,6 +99,10 @@ def test_email_verify_outbox_retry_and_preferences(client, monkeypatch):
         raise OSError('offline')
     monkeypatch.setattr('backend.notifications.urllib.request.urlopen', unavailable)
     assert client.post('/api/jobs/notifications', headers=jobs).json()['sent'] == 0
+    with client.app.state.sessions() as session:
+        mail = session.query(Plan).filter_by(kind='outbox').one()
+        mail.data = {**mail.data, 'nextAttempt': ''}
+        session.commit()
     class Response:
         def __enter__(self):return self
         def __exit__(self,*args):pass

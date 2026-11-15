@@ -1,4 +1,4 @@
-"""Verified email preferences and a durable, idempotent Resend outbox."""
+"""Verified email preferences and a durable HTTPS mail outbox."""
 import hashlib
 import hmac
 import json
@@ -14,10 +14,7 @@ from sqlalchemy import select
 
 from .models import Plan, Booking, Room
 from .schemas import Input
-
-
-def configured():
-    return bool(os.getenv('RESEND_API_KEY') and os.getenv('MAIL_FROM') and os.getenv('PUBLIC_URL'))
+from .mail_transport import configured, provider, send, DeliveryError
 
 
 def profile(session, uid):
@@ -73,7 +70,8 @@ def install(app, sessions, current_user, fail, secret):
     def settings(user=Depends(current_user)):
         with sessions() as session:
             p = profile(session, user.id)
-            return {'configured': configured(), 'email': p.data.get('email', '') if p else '', 'verified': bool(p and p.data.get('verified')), 'preferences': p.data.get('preferences', {}) if p else {}}
+            deliveries = [{'id': m.id, 'subject': m.data['subject'], 'state': m.data['state'], 'error': m.data.get('error', ''), 'nextAttempt': m.data.get('nextAttempt')} for m in session.scalars(select(Plan).where(Plan.kind == 'outbox', Plan.user_id == user.id).order_by(Plan.id.desc()).limit(20))]
+            return {'provider': provider(), 'deliveries': deliveries, 'configured': configured(), 'email': p.data.get('email', '') if p else '', 'verified': bool(p and p.data.get('verified')), 'preferences': p.data.get('preferences', {}) if p else {}}
 
     @app.put('/api/email', tags=['Email'])
     def save(data: Preferences, user=Depends(current_user)):
@@ -131,7 +129,7 @@ def install(app, sessions, current_user, fail, secret):
                     room = session.get(Room, b.room_id)
                     for uid in recipients(session, b):
                         enqueue(session, uid, 'reminder', 'Встреча начнётся в течение часа', f'{b.date}, {b.start_time}, {room.building}-{room.name}. '+os.environ['PUBLIC_URL'], 'reminder:'+str(b.id)+':'+str(uid))
-            pending = [p.id for p in session.scalars(select(Plan).where(Plan.kind == 'outbox').order_by(Plan.id)) if p.data['state'] == 'pending' or (p.data['state'] == 'processing' and p.data.get('lease', '') < now.isoformat())][:10]
+            pending = [p.id for p in session.scalars(select(Plan).where(Plan.kind == 'outbox').order_by(Plan.id)) if (p.data['state'] == 'pending' and p.data.get('nextAttempt', '') <= now.isoformat()) or (p.data['state'] == 'processing' and p.data.get('lease', '') < now.isoformat())][:10]
             session.commit()
         sent = 0
         for item_id in pending:
@@ -142,7 +140,7 @@ def install(app, sessions, current_user, fail, secret):
                     continue
                 d = dict(item.data)
                 p = profile(session, item.user_id)
-                stale = d.get('createdAt', campus_now().isoformat()) < (campus_now()-timedelta(hours=23)).isoformat()
+                stale = d.get('createdAt', campus_now().isoformat()) < (campus_now()-timedelta(hours=46 if provider() == 'google-apps-script' else 23)).isoformat()
                 if d['category'] == 'verification':
                     verification_hash = hashlib.sha256(d['body'].split('=')[-1].encode()).hexdigest()
                     stale = stale or not p or p.data.get('verificationHash') != verification_hash or p.data.get('expires', '') <= campus_now().isoformat()
@@ -163,16 +161,19 @@ def install(app, sessions, current_user, fail, secret):
                 item.data = {**d, 'state': 'processing', 'lease': (campus_now()+timedelta(minutes=5)).isoformat()}
                 token = item.token
                 session.commit()
-            request = urllib.request.Request('https://api.resend.com/emails', data=json.dumps({'from': os.environ['MAIL_FROM'], 'to': [d['to']], 'subject': d['subject'], 'text': d['body']}).encode(), headers={'Authorization': 'Bearer '+os.environ['RESEND_API_KEY'], 'Content-Type': 'application/json', 'Idempotency-Key': token}, method='POST')
             try:
-                with urllib.request.urlopen(request, timeout=5) as response:
-                    if not json.load(response).get('id'):
-                        raise ValueError('No provider message id')
+                send(d, token)
                 d['state'] = 'sent'
+                d.pop('error', None)
+                d.pop('nextAttempt', None)
                 sent += 1
-            except Exception:
-                d['attempts'] += 1
-                d['state'] = 'failed' if d['attempts'] >= 5 else 'pending'
+            except DeliveryError as exc:
+                d['error'] = exc.code
+                if exc.code != 'QUOTA_EXCEEDED':
+                    d['attempts'] += 1
+                d['state'] = 'failed' if exc.permanent or d['attempts'] >= 5 else 'pending'
+                delay = max(exc.retry_after, min(3600, 60 * 2**min(d['attempts'], 6)))
+                d['nextAttempt'] = (campus_now()+timedelta(seconds=delay)).isoformat()
             with sessions() as session:
                 item = session.get(Plan, item_id)
                 item.data = d
