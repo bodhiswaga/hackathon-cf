@@ -24,6 +24,7 @@ class PlanInput(Input):
     capacity: int = Field(default=1, ge=1, le=1000)
     equipment: list[str] = Field(default_factory=list, max_length=5)
     slots: list[Slot] = Field(min_length=1, max_length=20)
+    teamId: int | None = Field(default=None, gt=0)
 
 
 class Vote(Input):
@@ -137,6 +138,9 @@ def install(app, sessions, current_user, fail, validate_interval, room_json, boo
                 fail(422, 'PAST_BOOKING', 'Выберите будущие интервалы.')
         with sessions() as session:
             serialize_writes(session)
+            if data.teamId:
+                from .community import member
+                member(session, data.teamId, user, fail, True)
             active = session.scalars(select(Plan).where(Plan.user_id == user.id, Plan.kind.in_(['queue', 'meeting']))).all()
             if sum(p.data['state'] in ('waiting', 'open', 'offered') for p in active) >= 10:
                 fail(409, 'PLAN_LIMIT', 'Можно иметь не больше 10 открытых планов.')
@@ -147,6 +151,12 @@ def install(app, sessions, current_user, fail, validate_interval, room_json, boo
             session.flush()
             refresh_queue(session)
             audit(session, user, 'plan.create', plan.id)
+            if data.teamId and kind == 'meeting':
+                from .notifications import enqueue
+                import os
+                team = session.get(Plan, data.teamId)
+                for uid in team.data['members']:
+                    enqueue(session, int(uid), 'meeting', 'Выберите время: '+data.title, os.getenv('PUBLIC_URL', '')+'/#meeting='+plan.token, 'poll:'+str(plan.id)+':'+uid)
             session.commit()
             return result(session, plan)
 
@@ -198,6 +208,10 @@ def install(app, sessions, current_user, fail, validate_interval, room_json, boo
             data.update(state='confirmed', bookingId=booking.id)
             plan.data = data
             audit(session, user, 'plan.confirm', plan.id)
+            from .notifications import enqueue
+            recipients = session.get(Plan, data['teamId']).data['members'] if data.get('teamId') else {str(user.id): 'owner'}
+            for uid in recipients:
+                enqueue(session, int(uid), 'meeting', 'Встреча подтверждена: '+data['title'], f'{booking.date} {booking.start_time}–{booking.end_time}. Откройте CampusFlow для подробностей.', 'confirm:'+str(plan.id)+':'+uid)
             session.commit()
             return booking_json(session, booking)
 

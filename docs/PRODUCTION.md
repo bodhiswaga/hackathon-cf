@@ -13,11 +13,11 @@ CLI запрашивает пароль скрыто, минимум 12 симв
 
 ## Render Free: демонстрация и prod-ready приложение
 
-Полная пошаговая инструкция и команды публикации находятся в [README](../README.md#бесплатный-render-два-сайта).
+Обзор двух вариантов развёртывания находится в [README](../README.md#render-и-cron-joborg). Порядок настройки приведён ниже.
 
 - `render.yaml`: один бесплатный web, временная SQLite с учебными данными. После перезапуска изменения могут исчезнуть; seed создаётся заново.
 - `render.production.yaml`: бесплатный web и единственная бесплатная PostgreSQL workspace, APP_ENV=production, SEED_DATA=false, приглашения и закрытый Swagger.
-- Создайте два независимых Blueprint из одного репозитория, выбирая соответствующий Blueprint Path. Не управляйте одним ресурсом из двух Blueprint.
+- В Render выберите **New → Blueprint**, подключите репозиторий `bodhiswaga/hackathon-cf` и ветку `main`. Создайте два независимых Blueprint, выбирая соответствующий Blueprint Path из списка выше. Проверьте планы **Free** и нажмите **Deploy Blueprint**. Не управляйте одним ресурсом из двух Blueprint.
 - Free не поддерживает pre-deploy и Shell. `python -m backend.launch` до открытия HTTP-порта выполняет миграции под advisory lock, затем первичное создание администратора. Render hostname добавляется в ALLOWED_HOSTS автоматически. При своём домене добавьте точное имя в ALLOWED_HOSTS.
 - При первом деплое задайте BOOTSTRAP_ADMIN_PASSWORD (12+ символов); логин по умолчанию operator. После успешного входа удалите переменную из Render Environment и передеплойте. Существующий пароль при перезапуске не меняется; существующему студенту bootstrap не повышает роль.
 - JWT_SECRET и REGISTRATION_INVITE_CODE генерируются отдельно от демо. Код выдаётся участникам кампуса, секрет JWT — только серверу.

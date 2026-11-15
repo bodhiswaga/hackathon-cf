@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react'
 import { Search, CalendarDays, Building2, ChartNoAxesCombined, LogOut, Menu, X, MapPin, ChevronRight } from 'lucide-react'
 import type { User } from '../types'
-export type Page = 'search'|'bookings'|'admin-bookings'|'rooms'|'stats'|'account'|'plans'
+export type Page = 'search'|'bookings'|'admin-bookings'|'rooms'|'stats'|'account'|'plans'|'community'
 export default function Sidebar({user,page,onNavigate,onLogout}:{user:User;page:Page;onNavigate:(page:Page)=>void;onLogout:()=>void}){
   const [open,setOpen]=useState(false)
   const [mobile,setMobile]=useState(()=>matchMedia('(max-width:760px)').matches)
   useEffect(()=>{const media=matchMedia('(max-width:760px)');const update=()=>setMobile(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update)},[])
-  const sections = user.role==='admin' ? [{title:'Управление кампусом',items:[{id:'admin-bookings' as Page,title:'Все бронирования',icon:CalendarDays},{id:'rooms' as Page,title:'Аудитории',icon:Building2},{id:'stats' as Page,title:'Загрузка кампуса',icon:ChartNoAxesCombined}]}] : [{title:'Мой кампус',items:[{id:'search' as Page,title:'Найти аудиторию',icon:Search},{id:'bookings' as Page,title:'Мои бронирования',icon:CalendarDays},{id:'plans' as Page,title:'Встречи и очередь',icon:CalendarDays}]}]
+  const sections = user.role==='admin' ? [{title:'Управление кампусом',items:[{id:'admin-bookings' as Page,title:'Все бронирования',icon:CalendarDays},{id:'rooms' as Page,title:'Аудитории',icon:Building2},{id:'stats' as Page,title:'Загрузка кампуса',icon:ChartNoAxesCombined}]}] : [{title:'Мой кампус',items:[{id:'search' as Page,title:'Найти аудиторию',icon:Search},{id:'bookings' as Page,title:'Мои бронирования',icon:CalendarDays},{id:'community' as Page,title:'Команды и встречи',icon:CalendarDays},{id:'plans' as Page,title:'Встречи и очередь',icon:CalendarDays}]}]
   return <><div className="mobile-bar"><Brand/><button className="icon-button" aria-label={open?'Закрыть меню':'Открыть меню'} aria-expanded={open} onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button></div>{open&&<button className="nav-scrim" aria-label="Закрыть меню" onClick={()=>setOpen(false)}/>}
   <aside className={`sidebar ${open?'is-open':''}`} inert={mobile&&!open}><Brand/><div className="campus-label"><span className="campus-marker"><MapPin size={17}/></span><div>Университетский кампус<small>Екатеринбург</small></div></div>
   <nav aria-label="Основная навигация">{sections.map(section=><div className="nav-group" key={section.title}><p>{section.title}</p>{section.items.map(item=><button key={item.id} className={`nav-item ${page===item.id?'active':''}`} aria-current={page===item.id?'page':undefined} onClick={()=>{onNavigate(item.id);setOpen(false)}}><item.icon size={19}/><span>{item.title}</span>{page===item.id&&<ChevronRight size={15}/>}</button>)}</div>)}</nav>

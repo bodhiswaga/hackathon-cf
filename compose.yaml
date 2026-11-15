@@ -17,6 +17,10 @@ services:
     ports:
       - "8080:8000"
     environment:
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      NOTIFICATIONS_JOB_SECRET: ${NOTIFICATIONS_JOB_SECRET:-}
       DATABASE_URL: postgresql+psycopg://campusflow:local-campus-password@db/campusflow
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-for-deployment}
       SEED_DATA: "true"

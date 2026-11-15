@@ -27,6 +27,8 @@ from .seed import TIMEZONE, campus_now, seed
 from .migrate import upgrade, verify
 from .limiter import consume
 from .http_limits import BodyLimitMiddleware
+from .community import install as install_community
+from .notifications import install as install_notifications, enqueue, recipients
 from .planning import install as install_planning, serialize_writes, refresh_queue
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -189,6 +191,10 @@ def create_app(database_url=None, secret=None):
 
     def audit(session, user, action, entity_id=None):
         session.add(AuditEvent(actor_id=user.id, action=action, entity_id=entity_id))
+        if action in ('booking.create', 'booking.cancel', 'booking.replace'):
+            booking = session.get(Booking, entity_id)
+            for uid in recipients(session, booking):
+                enqueue(session, uid, 'meeting', 'Изменение брони CampusFlow', f'{booking.date} {booking.start_time}–{booking.end_time}, статус: {booking.status}. Подробности в приложении.', action+':'+str(entity_id)+':'+str(uid))
 
     @app.post('/api/auth/logout-all', tags=['Auth'])
     def logout_all(user=Depends(current_user)):
@@ -484,6 +490,9 @@ def create_app(database_url=None, secret=None):
         return Response('\ufeff'+stream.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition': 'attachment; filename="campusflow-bookings.csv"'})
 
     install_planning(app, sessions, current_user, fail, validate_interval, room_json, booking_json, audit, jwt_secret)
+
+    install_community(app, sessions, current_user, fail, validate_interval, booking_json, audit)
+    install_notifications(app, sessions, current_user, fail, jwt_secret)
 
     frontend = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
     if frontend.exists():

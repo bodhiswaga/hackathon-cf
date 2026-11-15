@@ -2,6 +2,7 @@ import {useState, type FormEvent} from 'react'
 import {Eye, EyeOff, LockKeyhole, Palette, ShieldCheck, UserRound} from 'lucide-react'
 import {api} from '../api'
 import type {User} from '../types'
+import EmailSettings from './EmailSettings'
 import Dialog from './Dialog'
 import ThemeToggle from './ThemeToggle'
 
@@ -88,7 +89,7 @@ export default function AccountPage({user, onUser, onSignedOut}: Props) {
       <span className="account-role">{user.role === 'admin' ? 'Администратор' : 'Студент'}</span>
     </div>
 
-    <div className="account-sections">
+    <EmailSettings/><div className="account-sections">
       <section className="settings-section" aria-labelledby="profile-heading">
         <div className="settings-heading"><UserRound size={20} aria-hidden="true"/><div><h2 id="profile-heading">Личные данные</h2><p>Имя отображается в бронированиях.</p></div></div>
         <form className="settings-form" onSubmit={saveProfile} aria-busy={pending === 'profile'}>

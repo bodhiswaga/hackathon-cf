@@ -27,6 +27,10 @@ services:
     ports:
       - "127.0.0.1:8081:8000"
     environment:
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      NOTIFICATIONS_JOB_SECRET: ${NOTIFICATIONS_JOB_SECRET:-}
       APP_ENV: production
       SEED_DATA: "false"
       DATABASE_URL: postgresql+psycopg://campusflow:${POSTGRES_PASSWORD}@db/campusflow
