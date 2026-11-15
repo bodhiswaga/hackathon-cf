@@ -62,3 +62,12 @@ class Booking(Base):
     end_time: Mapped[str] = mapped_column(String(5))
     status: Mapped[str] = mapped_column(String(20), default='active')
     comment: Mapped[str] = mapped_column(String(300), default='')
+
+
+class Plan(Base):
+    __tablename__ = 'plans'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    data: Mapped[dict] = mapped_column(JSON)

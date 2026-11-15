@@ -20,13 +20,14 @@ from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .database import make_engine, session_factory
-from .models import AuditEvent, AuthSession, Booking, Room, User
+from .models import AuditEvent, AuthSession, Booking, Room, User, Plan
 from .schemas import BookingInput, EQUIPMENT, Login, Register, RoomInput, ProfileInput, PasswordInput
 from .security import hash_password, verify_password
 from .seed import TIMEZONE, campus_now, seed
 from .migrate import upgrade, verify
 from .limiter import consume
 from .http_limits import BodyLimitMiddleware
+from .planning import install as install_planning, serialize_writes, refresh_queue
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 OPEN, CLOSE = '08:00', '22:00'
@@ -285,6 +286,12 @@ def create_app(database_url=None, secret=None):
             query = query.where(Booking.room_id == room_id)
         return session.scalars(query.order_by(Booking.start_time)).all()
 
+    def refresh_plans():
+        with sessions() as write_session:
+            serialize_writes(write_session)
+            refresh_queue(write_session)
+            write_session.commit()
+
     def validate_interval(start, end):
         pattern = r'^([01]\d|2[0-3]):[0-5]\d$'
         if not re.fullmatch(pattern, start) or not re.fullmatch(pattern, end) or not OPEN <= start < end <= CLOSE:
@@ -292,6 +299,7 @@ def create_app(database_url=None, secret=None):
 
     @app.get('/api/rooms', tags=['Rooms'])
     def rooms(building: str | None = None, minCapacity: int = Query(0, ge=0, le=1000), equipment: str = '', date: Date | None = None, startTime: str | None = None, endTime: str | None = None, session=Depends(db), user=Depends(current_user)):
+        refresh_plans()
         required = {v for v in equipment.split(',') if v}
         if required - EQUIPMENT.keys():
             fail(422, 'INVALID_EQUIPMENT', 'Неизвестное оборудование.')
@@ -320,17 +328,18 @@ def create_app(database_url=None, secret=None):
 
     @app.get('/api/rooms/{room_id}/free-slots', tags=['Rooms'])
     def slots(room_id: int, date: Date, session=Depends(db), user=Depends(current_user)):
+        refresh_plans()
         get_room(session, room_id)
         busy = day_bookings(session, date, room_id)
         return {'date': date.isoformat(), 'roomId': room_id, 'freeSlots': free_intervals(busy), 'busySlots': [{'startTime': b.start_time, 'endTime': b.end_time} for b in busy]}
 
     def booking_json(session, booking):
-        return {'id': booking.id, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
+        held = any(p.data.get('state') == 'offered' and p.data.get('bookingId') == booking.id for p in session.scalars(select(Plan).where(Plan.user_id == booking.user_id, Plan.kind == 'queue')))
+        return {'id': booking.id, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
 
     def lock_room(session, room_id):
         # A separate write session starts before any reads, including authentication.
-        if engine.dialect.name == 'sqlite':
-            session.execute(text('BEGIN IMMEDIATE'))
+        serialize_writes(session)
         room = session.scalar(select(Room).where(Room.id == room_id).with_for_update())
         if not room or not room.active:
             fail(404, 'ROOM_NOT_FOUND', 'Аудитория больше недоступна.')
@@ -346,6 +355,7 @@ def create_app(database_url=None, secret=None):
             fail(422, 'PAST_BOOKING', 'Нельзя забронировать время в прошлом.')
         with sessions() as session:
             lock_room(session, data.roomId)
+            refresh_queue(session)
             conflict = session.scalar(select(Booking.id).where(Booking.room_id == data.roomId, Booking.date == data.date, Booking.status == 'active', Booking.start_time < data.endTime, Booking.end_time > data.startTime).limit(1))
             if conflict:
                 fail(409, 'BOOKING_CONFLICT', 'Этот интервал уже занят. Выберите другое время или аудиторию.')
@@ -358,6 +368,7 @@ def create_app(database_url=None, secret=None):
 
     @app.get('/api/bookings/my', tags=['Bookings'])
     def my_bookings(session=Depends(db), user=Depends(current_user)):
+        refresh_plans()
         return [booking_json(session, b) for b in session.scalars(select(Booking).where(Booking.user_id == user.id).order_by(Booking.date.desc(), Booking.start_time)).all()]
 
     def owned_booking(session, booking_id, user):
@@ -374,9 +385,12 @@ def create_app(database_url=None, secret=None):
 
     def cancel(booking_id, user):
         with sessions() as session:
+            serialize_writes(session)
             booking = owned_booking(session, booking_id, user)
             booking.status = 'cancelled'
             audit(session, user, 'booking.cancel', booking.id)
+            session.flush()
+            refresh_queue(session)
             session.commit()
             return booking_json(session, booking)
 
@@ -468,6 +482,8 @@ def create_app(database_url=None, secret=None):
             room, owner = session.get(Room, b.room_id), session.get(User, b.user_id)
             writer.writerow([safe(v) for v in [b.id, b.date, b.start_time, b.end_time, room.building, room.name, owner.display_name, b.status, b.comment]])
         return Response('\ufeff'+stream.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition': 'attachment; filename="campusflow-bookings.csv"'})
+
+    install_planning(app, sessions, current_user, fail, validate_interval, room_json, booking_json, audit, jwt_secret)
 
     frontend = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
     if frontend.exists():

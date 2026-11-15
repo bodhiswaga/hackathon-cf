@@ -7,7 +7,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from .database import make_engine
 
-HEAD = '0002'
+HEAD = '0003'
 _migration_lock = Lock()
 
 
