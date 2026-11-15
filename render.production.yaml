@@ -1,12 +1,12 @@
-# Paid production blueprint. Review the Render cost estimate before creating.
+# Free hosting of the production application configuration. See README limits.
 services:
   - type: web
     name: campusflow-production
     runtime: docker
-    plan: 0.5c-512mb
+    plan: free
     region: frankfurt
     healthCheckPath: /api/health
-    preDeployCommand: python -m backend.migrate
+    dockerCommand: python -m backend.launch
     envVars:
       - key: APP_ENV
         value: production
@@ -19,6 +19,12 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ALLOWED_HOSTS
+        value: localhost,127.0.0.1
+      - key: BOOTSTRAP_ADMIN_LOGIN
+        value: operator
+      - key: BOOTSTRAP_ADMIN_NAME
+        value: Администратор кампуса
+      - key: BOOTSTRAP_ADMIN_PASSWORD
         sync: false
       - key: REGISTRATION_MODE
         value: invite
@@ -30,7 +36,7 @@ services:
         value: "*"
 databases:
   - name: campusflow-production-db
-    plan: 0.5c-1g
+    plan: free
     region: frankfurt
     databaseName: campusflow
     user: campusflow
