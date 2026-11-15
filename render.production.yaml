@@ -1,0 +1,38 @@
+# Paid production blueprint. Review the Render cost estimate before creating.
+services:
+  - type: web
+    name: campusflow-production
+    runtime: docker
+    plan: 0.5c-512mb
+    region: frankfurt
+    healthCheckPath: /api/health
+    preDeployCommand: python -m backend.migrate
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SEED_DATA
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: campusflow-production-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: REGISTRATION_MODE
+        value: invite
+      - key: REGISTRATION_INVITE_CODE
+        generateValue: true
+      - key: CAMPUS_TIMEZONE
+        value: Asia/Yekaterinburg
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+databases:
+  - name: campusflow-production-db
+    plan: 0.5c-1g
+    region: frankfurt
+    databaseName: campusflow
+    user: campusflow
+    postgresMajorVersion: "17"
+    ipAllowList: []

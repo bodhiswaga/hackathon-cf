@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campusflow
+      POSTGRES_USER: campusflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - production-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campusflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    command: ["python", "-m", "backend.migrate"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://campusflow:${POSTGRES_PASSWORD}@db/campusflow
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8000"
+    environment:
+      APP_ENV: production
+      SEED_DATA: "false"
+      DATABASE_URL: postgresql+psycopg://campusflow:${POSTGRES_PASSWORD}@db/campusflow
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      REGISTRATION_MODE: invite
+      REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:?Set REGISTRATION_INVITE_CODE}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+volumes:
+  production-data:

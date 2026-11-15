@@ -1,0 +1,9 @@
+fastapi==0.163.1
+uvicorn==0.54.0
+SQLAlchemy==2.1.8
+psycopg[binary]==3.3.9
+PyJWT==2.15.1
+pydantic==2.14.3
+tzdata==2026.6
+alembic==1.20.1
+-c requirements.lock
