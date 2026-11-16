@@ -219,8 +219,8 @@ def install(app, sessions, current_user, admin, fail, validate_interval, audit, 
             serialize_writes(s)
             b=owned(s,bid,user)
             now=campus_now()
-            if b.date!=now.date() or not b.start_time<=now.strftime('%H:%M')<b.end_time:
-                fail(409,'OUTSIDE_MEETING','Подтверждение доступно во время встречи.')
+            if b.date!=now.date() or not (now.replace(hour=int(b.start_time[:2]),minute=int(b.start_time[3:]),second=0,microsecond=0)-timedelta(minutes=10))<=now<now.replace(hour=int(b.end_time[:2]),minute=int(b.end_time[3:]),second=0,microsecond=0):
+                fail(409,'OUTSIDE_MEETING','Подтверждение доступно за 10 минут до начала и до окончания встречи.')
             b.checked_in=True
             audit(s,user,'booking.checkin',bid)
             s.commit()

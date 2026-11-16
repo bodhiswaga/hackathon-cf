@@ -64,7 +64,8 @@ def refresh_queue(session):
             continue
         future = [s for s in data['slots'] if s['date']+'T'+s['startTime'] > now.isoformat()[:16]]
         if not future:
-            data['state'] = 'expired'
+            if all(s['date']+'T'+s['endTime'] <= now.isoformat()[:16] for s in data['slots']):
+                data['state'] = 'expired'
         else:
             for slot in future:
                 available = candidates(session, data, slot)

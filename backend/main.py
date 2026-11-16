@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import suppress
+from .attendance import process as process_attendance, attendance_json
 import csv
 import io
 import os
@@ -98,8 +101,31 @@ def create_app(database_url=None, secret=None):
         if demo:
             with sessions() as session:
                 seed(session)
-        yield
-        engine.dispose()
+        async def attendance_loop():
+            first=True
+            while True:
+                try:
+                    def tick():
+                        with sessions() as session:
+                            serialize_writes(session)
+                            seen=getattr(app.state,'attendance_reachable',None)
+                            reachable=bool(seen and 0<=(campus_now()-seen).total_seconds()<=90)
+                            process_attendance(session,failure=getattr(app.state,'attendance_failure',None),startup=first,reachable=reachable)
+                            session.commit()
+                    await asyncio.to_thread(tick)
+                    first=False
+                except Exception:
+                    app.state.attendance_failure=campus_now()
+                    logger.error('attendance_job_failed; automatic cancellation protected')
+                await asyncio.sleep(30)
+        task=asyncio.create_task(attendance_loop())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            engine.dispose()
 
     app = FastAPI(title='CampusFlow API', version='1.1.0', description='Бронирование аудиторий. Время кампуса: Asia/Yekaterinburg. Вход: /api/auth/login; вставьте accessToken в Authorize.', lifespan=lifespan, docs_url=None if production else '/docs', redoc_url=None if production else '/redoc', openapi_url=None if production else '/openapi.json')
     app.state.engine = engine
@@ -130,6 +156,10 @@ def create_app(database_url=None, secret=None):
             # Never log request bodies, credentials or SQL parameters.
             logger.error('request_failed id=%s method=%s path=%s', request_id, request.method, request.url.path)
             response = JSONResponse({'error': {'code':'INTERNAL_ERROR','message':'Ошибка сервера. Повторите попытку позже.', 'requestId':request_id}}, status_code=500)
+        if request.url.path.startswith('/api/') and response.status_code<400:
+            app.state.attendance_reachable=campus_now()
+        if response.status_code>=500 or (response.status_code>=400 and request.url.path.startswith('/assets/')):
+            app.state.attendance_failure=campus_now()
         response.headers['X-Request-ID'] = request_id
         logger.info('request id=%s method=%s path=%s status=%s duration_ms=%s', request_id, request.method, request.url.path, response.status_code, round((time.monotonic()-started)*1000))
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -347,7 +377,7 @@ def create_app(database_url=None, secret=None):
 
     def booking_json(session, booking):
         held = any(p.data.get('state') == 'offered' and p.data.get('bookingId') == booking.id for p in session.scalars(select(Plan).where(Plan.user_id == booking.user_id, Plan.kind == 'queue')))
-        return {'id': booking.id, 'warnings':[p.data['reason'] for p in restrictions(session,booking.room_id,booking.date) if p.data['startTime']<booking.end_time and p.data['endTime']>booking.start_time and (not p.data['equipment'] or set(p.data['equipment']) & set(booking.requirements))], 'checkedIn': booking.checked_in, 'requirements': booking.requirements, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
+        return {'id': booking.id, 'warnings':[p.data['reason'] for p in restrictions(session,booking.room_id,booking.date) if p.data['startTime']<booking.end_time and p.data['endTime']>booking.start_time and (not p.data['equipment'] or set(p.data['equipment']) & set(booking.requirements))], 'attendance': attendance_json(session,booking), 'checkedIn': booking.checked_in, 'requirements': booking.requirements, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
 
     def lock_room(session, room_id):
         # A separate write session starts before any reads, including authentication.
