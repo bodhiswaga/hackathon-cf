@@ -1,15 +1,15 @@
 import {useRef,useState} from 'react'
 import {Camera} from 'lucide-react'
 import {api} from '../api'
+import {readAvatarFile} from '../avatar-file'
 import type {User} from '../types'
 export function Avatar({user,className='avatar'}:{user:User;className?:string}){return <span className={className} aria-hidden="true">{user.avatar?<img src={user.avatar} alt=""/>:user.displayName.trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('')}</span>}
 export default function AvatarEditor({user,onUser}:{user:User;onUser:(u:User)=>void}){
  const input=useRef<HTMLInputElement>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  async function upload(file?:File){if(!file)return;setError('');setBusy(true);try{
   if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024)throw new Error('Выбери JPEG, PNG или WebP до 5 МБ.')
-  const url=URL.createObjectURL(file)
-  let image:HTMLImageElement
-  try{image=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('Не удалось прочитать изображение.'));i.src=url})}finally{URL.revokeObjectURL(url)}
+  const source=await readAvatarFile(file)
+  const image=await new Promise<HTMLImageElement>((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('Не удалось прочитать изображение. Попробуй сохранить фото в JPEG или PNG.'));i.src=source})
   const canvas=document.createElement('canvas');canvas.width=canvas.height=192
   const context=canvas.getContext('2d');if(!context)throw new Error('Браузер не поддерживает обработку фото.')
   const side=Math.min(image.width,image.height);context.fillStyle='#ffffff';context.fillRect(0,0,192,192);context.drawImage(image,(image.width-side)/2,(image.height-side)/2,side,side,0,0,192,192)

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readAvatarFile} from '../src/avatar-file.ts'
 import {mailPreview} from '../src/mail-history.ts'
 import {accounts,remember,forget,validateAccount} from '../src/accounts.ts'
 test('mail preview limits and exact 15-minute boundary',()=>{
@@ -21,4 +22,18 @@ test('account store deduplicates, forgets and rejects revoked tokens',async()=>{
  await assert.rejects(validateAccount(accounts()[1]),/истекла/)
  assert.deepEqual(accounts().map(a=>a.user.id),[1])
  forget(1);assert.equal(accounts().length,0)
+})
+
+test('avatar uses CSP-compatible data URL and handles unreadable files',async()=>{
+ let chosen
+ globalThis.FileReader=class {
+  readAsDataURL(file){chosen=file;this.result='data:image/png;base64,test';this.onload()}
+ }
+ const file=new Blob(['image'])
+ assert.equal(await readAvatarFile(file),'data:image/png;base64,test')
+ assert.equal(chosen,file)
+ globalThis.FileReader=class {readAsDataURL(){this.onerror()}}
+ await assert.rejects(readAvatarFile(file),/Не удалось прочитать файл/)
+ globalThis.FileReader=class {readAsDataURL(){this.onabort()}}
+ await assert.rejects(readAvatarFile(file),/отменено/)
 })
