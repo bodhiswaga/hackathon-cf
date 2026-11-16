@@ -6,6 +6,7 @@ from fastapi import Depends
 from pydantic import Field
 from sqlalchemy import select
 
+from .controls import blocked
 from .models import Plan, Booking, User, Room
 from .schemas import Input, BookingInput
 from .planning import serialize_writes, refresh_queue
@@ -136,7 +137,7 @@ def install(app, sessions, current_user, fail, validate_interval, booking_json, 
             if not room or not room.active:
                 fail(404, 'ROOM_NOT_FOUND', 'Аудитория недоступна.')
             busy = session.scalar(select(Booking.id).where(Booking.room_id == room_id, Booking.date == day, Booking.status == 'active', Booking.start_time < data.endTime, Booking.end_time > data.startTime, Booking.id.not_in(exclude)).limit(1))
-            rows.append({'index': i, 'date': day.isoformat(), 'roomId': room_id, 'roomName': room.building+'-'+room.name, 'conflict': bool(busy), 'skipped': i in data.skip})
+            rows.append({'index': i, 'date': day.isoformat(), 'roomId': room_id, 'roomName': room.building+'-'+room.name, 'conflict': bool(busy) or blocked(session,room_id,day,data.startTime,data.endTime,data.requirements), 'skipped': i in data.skip})
         return rows
 
     @app.post('/api/series/preview', tags=['Series'])
@@ -172,7 +173,7 @@ def install(app, sessions, current_user, fail, validate_interval, booking_json, 
                     else:
                         ids.append(bid)
             for row in selected:
-                b = Booking(room_id=row['roomId'], user_id=user.id, date=data.date+timedelta(weeks=row['index']), start_time=data.startTime, end_time=data.endTime, comment=data.comment)
+                b = Booking(room_id=row['roomId'], user_id=user.id, date=data.date+timedelta(weeks=row['index']), start_time=data.startTime, end_time=data.endTime, comment=data.comment, requirements=data.requirements, team_id=data.teamId)
                 session.add(b)
                 session.flush()
                 ids.append(b.id)

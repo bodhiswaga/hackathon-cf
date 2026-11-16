@@ -2,7 +2,8 @@
 import secrets
 from datetime import date, timedelta
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, HTTPException
+from .controls import blocked, check
 from pydantic import Field
 from sqlalchemy import select, text
 
@@ -70,7 +71,11 @@ def refresh_queue(session):
                 if available:
                     booking = Booking(room_id=available[0].id, user_id=plan.user_id,
                                       date=date.fromisoformat(slot['date']), start_time=slot['startTime'],
-                                      end_time=slot['endTime'], comment=data['title'])
+                                      end_time=slot['endTime'], comment=data['title'], requirements=data['equipment'], team_id=data.get('teamId'))
+                    try:
+                        check(session,booking)
+                    except HTTPException:
+                        continue
                     session.add(booking)
                     session.flush()
                     data.update(state='offered', bookingId=booking.id,
@@ -83,7 +88,7 @@ def refresh_queue(session):
 def candidates(session, data, slot):
     rooms = session.scalars(select(Room).where(Room.active.is_(True), Room.capacity >= data['capacity']).order_by(Room.capacity, Room.building, Room.name)).all()
     busy = set(session.scalars(select(Booking.room_id).where(Booking.status == 'active', Booking.date == date.fromisoformat(slot['date']), Booking.start_time < slot['endTime'], Booking.end_time > slot['startTime'])))
-    return [r for r in rooms if r.id not in busy and (not data['building'] or r.building == data['building']) and set(data['equipment']).issubset(r.equipment)]
+    return [r for r in rooms if r.id not in busy and (not data['building'] or r.building == data['building']) and set(data['equipment']).issubset(r.equipment) and not blocked(session,r.id,slot['date'],slot['startTime'],slot['endTime'],data['equipment'])]
 
 
 def install(app, sessions, current_user, fail, validate_interval, room_json, booking_json, audit, secret):
@@ -200,11 +205,12 @@ def install(app, sessions, current_user, fail, validate_interval, room_json, boo
                     fail(422, 'PAST_BOOKING', 'Время уже прошло.')
                 if choice.roomId not in [r.id for r in candidates(session, data, slot)]:
                     fail(409, 'BOOKING_CONFLICT', 'Аудитория уже занята. Обновите варианты.')
-                booking = Booking(room_id=choice.roomId, user_id=user.id, date=date.fromisoformat(slot['date']), start_time=slot['startTime'], end_time=slot['endTime'], comment=data['title'])
+                booking = Booking(room_id=choice.roomId, user_id=user.id, date=date.fromisoformat(slot['date']), start_time=slot['startTime'], end_time=slot['endTime'], comment=data['title'], requirements=data['equipment'], team_id=data.get('teamId'))
                 session.add(booking)
                 session.flush()
             else:
                 fail(409, 'PLAN_CLOSED', 'Предложение истекло или план уже завершён.')
+            check(session,booking)
             data.update(state='confirmed', bookingId=booking.id)
             plan.data = data
             audit(session, user, 'plan.confirm', plan.id)
@@ -276,7 +282,7 @@ def install(app, sessions, current_user, fail, validate_interval, room_json, boo
             available = candidates(session, {'capacity': room.capacity, 'equipment': room.equipment, 'building': ''}, slot)
             if choice.roomId == room.id or choice.roomId not in [r.id for r in available]:
                 fail(409, 'BOOKING_CONFLICT', 'Подходящая аудитория уже недоступна.')
-            booking = Booking(room_id=choice.roomId, user_id=user.id, date=original.date, start_time=original.start_time, end_time=original.end_time, comment=original.comment)
+            booking = Booking(room_id=choice.roomId, user_id=user.id, date=original.date, start_time=original.start_time, end_time=original.end_time, comment=original.comment, requirements=original.requirements, team_id=original.team_id)
             session.add(booking)
             session.flush()
             session.add(Plan(user_id=user.id, kind='repair', token='repair-'+str(booking_id), data={'originalId': booking_id, 'bookingId': booking.id, 'state': 'confirmed'}))

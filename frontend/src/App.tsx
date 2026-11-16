@@ -14,6 +14,7 @@ import PlanningPage, {SharedMeeting} from './components/PlanningPage'
 import CommunityPage from './components/CommunityPage'
 import {VerifyEmail} from './components/EmailSettings'
 import StatsPage from './components/StatsPage'
+import PublicRoom from './components/PublicRoom'
 import {dateLabel} from './utils'
 export default function App(){
  const [hash,setHash]=useState(()=>location.hash)
@@ -31,6 +32,8 @@ export default function App(){
  function auth(value:Auth){saveToken(value.accessToken);setUser(value.user);setPage(value.user.role==='admin'?'admin-bookings':location.hash.includes('team=')?'community':'search');setNotice('');if(!meta)api<Meta>('/meta').then(setMeta).catch(e=>setError(e.message))}
  async function logout(){try{await api('/auth/logout',{method:'POST'});saveToken(null);setUser(null);setNotice('')}catch(e){setError((e as Error).message)}}
  async function refreshMeta(){try{setMeta(await api<Meta>('/meta'))}catch{/* next page load retries metadata */}}
+ useEffect(()=>{let active=true;const timer=setInterval(()=>{if(!document.hidden)api<Meta>('/meta').then(m=>{if(active)setMeta(m)}).catch(()=>{})},30000);return()=>{active=false;clearInterval(timer)}},[])
+ if(hashParams.has('room'))return <PublicRoom id={hashParams.get('room')||''}/>
  if(verificationPage)return <VerifyEmail token={verificationToken} key={verificationToken}/>
  if(meetingToken)return <SharedMeeting token={meetingToken}/>
  if(booting)return <div className="boot-screen"><span className="loading-ring"/><p>Открываем кампус…</p></div>

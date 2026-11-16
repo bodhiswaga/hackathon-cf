@@ -62,6 +62,9 @@ class Booking(Base):
     end_time: Mapped[str] = mapped_column(String(5))
     status: Mapped[str] = mapped_column(String(20), default='active')
     comment: Mapped[str] = mapped_column(String(300), default='')
+    requirements: Mapped[list] = mapped_column(JSON, default=list)
+    team_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    checked_in: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Plan(Base):

@@ -27,6 +27,7 @@ from .seed import TIMEZONE, campus_now, seed
 from .migrate import upgrade, verify
 from .limiter import consume
 from .http_limits import BodyLimitMiddleware
+from .controls import install as install_controls, closure_slots, blocked, restrictions
 from .community import install as install_community
 from .notifications import install as install_notifications, enqueue, recipients
 from .planning import install as install_planning, serialize_writes, refresh_queue
@@ -321,7 +322,12 @@ def create_app(database_url=None, secret=None):
         for room in session.scalars(query).all():
             if not required.issubset(room.equipment):
                 continue
-            occupied = [b for b in busy if b.room_id == room.id]
+            occupied = [b for b in busy if b.room_id == room.id] + (closure_slots(session,room.id,date) if date else [])
+            if date and required:
+                from types import SimpleNamespace
+                occupied += [SimpleNamespace(start_time=p.data['startTime'],end_time=p.data['endTime']) for p in restrictions(session,room.id,date) if set(p.data['equipment']) & required]
+            if startTime and blocked(session,room.id,date,startTime,endTime,required):
+                continue
             available = not any(b.start_time < endTime and b.end_time > startTime for b in occupied) if startTime else True
             if startTime and not available:
                 continue
@@ -336,12 +342,12 @@ def create_app(database_url=None, secret=None):
     def slots(room_id: int, date: Date, session=Depends(db), user=Depends(current_user)):
         refresh_plans()
         get_room(session, room_id)
-        busy = day_bookings(session, date, room_id)
+        busy = day_bookings(session, date, room_id) + closure_slots(session,room_id,date)
         return {'date': date.isoformat(), 'roomId': room_id, 'freeSlots': free_intervals(busy), 'busySlots': [{'startTime': b.start_time, 'endTime': b.end_time} for b in busy]}
 
     def booking_json(session, booking):
         held = any(p.data.get('state') == 'offered' and p.data.get('bookingId') == booking.id for p in session.scalars(select(Plan).where(Plan.user_id == booking.user_id, Plan.kind == 'queue')))
-        return {'id': booking.id, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
+        return {'id': booking.id, 'checkedIn': booking.checked_in, 'requirements': booking.requirements, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
 
     def lock_room(session, room_id):
         # A separate write session starts before any reads, including authentication.
@@ -365,7 +371,7 @@ def create_app(database_url=None, secret=None):
             conflict = session.scalar(select(Booking.id).where(Booking.room_id == data.roomId, Booking.date == data.date, Booking.status == 'active', Booking.start_time < data.endTime, Booking.end_time > data.startTime).limit(1))
             if conflict:
                 fail(409, 'BOOKING_CONFLICT', 'Этот интервал уже занят. Выберите другое время или аудиторию.')
-            booking = Booking(room_id=data.roomId, user_id=user.id, date=data.date, start_time=data.startTime, end_time=data.endTime, comment=data.comment)
+            booking = Booking(room_id=data.roomId, user_id=user.id, date=data.date, start_time=data.startTime, end_time=data.endTime, comment=data.comment, requirements=data.requirements)
             session.add(booking)
             session.flush()
             audit(session, user, 'booking.create', booking.id)
@@ -458,16 +464,25 @@ def create_app(database_url=None, secret=None):
         first = date or campus_now().date()
         rooms = session.scalars(select(Room).where(Room.active.is_(True))).all()
         bookings = session.scalars(select(Booking).where(Booking.status == 'active', Booking.date >= first, Booking.date < first+timedelta(days=7))).all()
+        held_ids = {p.data.get('bookingId') for p in session.scalars(select(Plan).where(Plan.kind == 'queue')) if p.data.get('state') == 'offered'}
+        held_count = sum(b.id in held_ids for b in bookings)
+        bookings = [b for b in bookings if b.id not in held_ids]
         rows = []
+        hourly = []
         for offset in range(7):
             day = first+timedelta(days=offset)
             for building in sorted({r.building for r in rooms}):
                 room_ids = {r.id for r in rooms if r.building == building}
                 matches = [b for b in bookings if b.date == day and b.room_id in room_ids]
+                for hour in range(8,22):
+                    booked = sum(max(0,min(minutes(b.end_time),(hour+1)*60)-max(minutes(b.start_time),hour*60)) for b in matches)
+                    hourly.append({'date':day.isoformat(),'building':building,'hour':f'{hour:02}:00','occupancy':round(booked/(len(room_ids)*60)*100,1) if room_ids else 0})
                 occupied = sum(minutes(b.end_time)-minutes(b.start_time) for b in matches)
                 total = len(room_ids)*(minutes(CLOSE)-minutes(OPEN))
                 rows.append({'date': day.isoformat(), 'building': building, 'bookings': len(matches), 'occupiedMinutes': occupied, 'availableMinutes': total, 'occupancy': round(occupied/total*100, 1) if total else 0})
-        return {'rows': rows, 'roomCount': len(rooms), 'bookingCount': len(bookings), 'occupiedHours': round(sum(minutes(b.end_time)-minutes(b.start_time) for b in bookings)/60, 1)}
+        room_rows = [{'id':r.id,'name':r.building+'-'+r.name,'hours':round(sum(minutes(b.end_time)-minutes(b.start_time) for b in bookings if b.room_id==r.id)/60,1)} for r in rooms]
+        attendance = {'checkedIn':sum(b.checked_in for b in bookings), 'unconfirmedPast':sum(not b.checked_in and b.date.isoformat()+'T'+b.end_time < campus_now().isoformat()[:16] for b in bookings)}
+        return {'rooms':room_rows,'attendance':attendance,'rows': rows, 'hourly':hourly, 'heldCount':held_count, 'roomCount': len(rooms), 'bookingCount': len(bookings), 'occupiedHours': round(sum(minutes(b.end_time)-minutes(b.start_time) for b in bookings)/60, 1)}
 
     @app.get('/api/admin/audit', tags=['Admin'])
     def audit_history(limit: int = Query(50, ge=1, le=200), before: int | None = None, session=Depends(db), user=Depends(admin)):
@@ -489,6 +504,7 @@ def create_app(database_url=None, secret=None):
             writer.writerow([safe(v) for v in [b.id, b.date, b.start_time, b.end_time, room.building, room.name, owner.display_name, b.status, b.comment]])
         return Response('\ufeff'+stream.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition': 'attachment; filename="campusflow-bookings.csv"'})
 
+    install_controls(app,sessions,current_user,admin,fail,validate_interval,audit,booking_json,room_json,free_intervals)
     install_planning(app, sessions, current_user, fail, validate_interval, room_json, booking_json, audit, jwt_secret)
 
     install_community(app, sessions, current_user, fail, validate_interval, booking_json, audit)

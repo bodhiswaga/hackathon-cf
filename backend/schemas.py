@@ -33,6 +33,15 @@ class PasswordInput(Input):
 
 
 class BookingInput(Input):
+    requirements: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator('requirements')
+    @classmethod
+    def valid_requirements(cls, values):
+        if set(values) - EQUIPMENT.keys():
+            raise ValueError('Неизвестное оборудование')
+        return sorted(set(values))
+
     roomId: int = Field(gt=0)
     date: Date
     startTime: str = Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')

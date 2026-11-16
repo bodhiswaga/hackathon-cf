@@ -22,4 +22,7 @@ def make_engine(url: str):
 
 
 def session_factory(engine):
-    return sessionmaker(bind=engine, expire_on_commit=False)
+    from .controls import guard
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    event.listen(factory, 'before_flush', guard)
+    return factory
