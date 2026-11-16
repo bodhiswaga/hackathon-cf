@@ -188,7 +188,7 @@ python -m venv .venv
 cd frontend
 npm ci
 npm run build
-node --experimental-strip-types --test tests/profile-state.test.mjs
+npm test
 ```
 
 CI проверяет backend на SQLite и PostgreSQL 17, frontend и Docker-сборку. Точные результаты и границы проверок — в [журнале проверок](docs/VERIFICATION.md).
