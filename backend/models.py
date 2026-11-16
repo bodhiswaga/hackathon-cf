@@ -11,6 +11,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(20))
     display_name: Mapped[str] = mapped_column(String(100))
+    first_name: Mapped[str] = mapped_column(String(50), default='')
+    last_name: Mapped[str] = mapped_column(String(50), default='')
+    avatar: Mapped[str] = mapped_column(String(40000), default='')
 
 
 class AuthSession(Base):

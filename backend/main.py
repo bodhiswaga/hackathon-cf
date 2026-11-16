@@ -46,7 +46,7 @@ def fail(status, code, message):
 
 
 def user_json(user):
-    return {'id': user.id, 'login': user.login, 'role': user.role, 'displayName': user.display_name}
+    return {'id': user.id, 'login': user.login, 'role': user.role, 'displayName': user.display_name, 'firstName': user.first_name or user.display_name.partition(' ')[0], 'lastName': user.last_name or user.display_name.partition(' ')[2], 'avatar':user.avatar}
 
 
 def room_json(room):
@@ -239,6 +239,7 @@ def create_app(database_url=None, secret=None):
     @app.patch('/api/auth/profile', tags=['Auth'])
     def profile(data: ProfileInput, user=Depends(current_user), session=Depends(db)):
         user.display_name = data.displayName
+        user.first_name, user.last_name = data.firstName, data.lastName
         audit(session, user, 'profile.update')
         session.commit()
         return user_json(user)
@@ -298,7 +299,7 @@ def create_app(database_url=None, secret=None):
             fail(422, 'WEAK_PASSWORD', 'Пароль должен содержать не менее 12 символов.')
         if not data.displayName.strip():
             fail(422, 'INVALID_NAME', 'Укажите имя.')
-        user = User(login=data.login.lower(), display_name=data.displayName, password_hash=hash_password(data.password), role='student')
+        user = User(login=data.login.lower(), display_name=data.displayName, first_name=data.firstName, last_name=data.lastName, password_hash=hash_password(data.password), role='student')
         session.add(user)
         try:
             session.commit()
@@ -534,6 +535,8 @@ def create_app(database_url=None, secret=None):
             writer.writerow([safe(v) for v in [b.id, b.date, b.start_time, b.end_time, room.building, room.name, owner.display_name, b.status, b.comment]])
         return Response('\ufeff'+stream.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition': 'attachment; filename="campusflow-bookings.csv"'})
 
+    from .avatars import install as install_avatars
+    install_avatars(app,current_user,db,user_json,audit)
     install_controls(app,sessions,current_user,admin,fail,validate_interval,audit,booking_json,room_json,free_intervals)
     install_planning(app, sessions, current_user, fail, validate_interval, room_json, booking_json, audit, jwt_secret)
 

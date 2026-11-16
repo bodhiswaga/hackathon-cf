@@ -1,5 +1,5 @@
 from datetime import date as Date
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 EQUIPMENT = {'projector': 'Проектор', 'whiteboard': 'Доска', 'computers': 'Компьютеры', 'wifi': 'Wi-Fi', 'outlets': 'Розетки'}
 
@@ -14,16 +14,38 @@ class Login(Input):
     password: str = Field(min_length=1, max_length=128)
 
 
-class Register(Input):
+class PersonName(Input):
+    displayName: str | None = Field(default=None, min_length=2, max_length=100)
+    firstName: str | None = Field(default=None, min_length=1, max_length=50)
+    lastName: str | None = Field(default=None, min_length=1, max_length=50)
+
+    @model_validator(mode='after')
+    def names(self):
+        if self.firstName is not None or self.lastName is not None:
+            if not (self.firstName and self.firstName.strip() and self.lastName and self.lastName.strip()):
+                raise ValueError('Укажите имя и фамилию')
+            self.firstName, self.lastName = self.firstName.strip(), self.lastName.strip()
+            self.displayName = self.firstName+' '+self.lastName
+        elif self.displayName and self.displayName.strip():
+            self.displayName = self.displayName.strip()
+            first, _, last = self.displayName.partition(' ')
+            self.firstName, self.lastName = first[:50], last[:50]
+        else:
+            raise ValueError('Укажите имя и фамилию')
+        if len(self.displayName)>100:
+            raise ValueError('Имя и фамилия вместе — до 100 символов')
+        return self
+
+
+class Register(PersonName):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     login: str = Field(min_length=3, max_length=40, pattern=r'^[a-zA-Z0-9_.-]+$')
-    displayName: str = Field(min_length=2, max_length=100)
     password: str = Field(min_length=8, max_length=128)
     inviteCode: str = Field(default='', max_length=128)
 
 
-class ProfileInput(Input):
-    displayName: str = Field(min_length=2, max_length=100)
+class ProfileInput(PersonName):
+    pass
 
 
 class PasswordInput(Input):

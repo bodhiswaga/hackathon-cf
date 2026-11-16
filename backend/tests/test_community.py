@@ -109,6 +109,7 @@ def test_email_verify_outbox_retry_and_preferences(client, monkeypatch):
         def read(self):return b'{"id":"provider-test-id"}'
     monkeypatch.setattr('backend.notifications.urllib.request.urlopen', lambda *args,**kwargs:Response())
     assert client.post('/api/jobs/notifications', headers=jobs).json()['sent'] == 1
+    assert client.get('/api/email', headers=h).json()['deliveries'][0]['sentAt']
     assert client.post('/api/jobs/notifications', headers=jobs).json()['sent'] == 0
     assert client.post('/api/email/verify', json={'token':token}).status_code == 200
     assert client.post('/api/email/verify', json={'token':token}).status_code == 400

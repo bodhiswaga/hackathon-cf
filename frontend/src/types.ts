@@ -1,4 +1,4 @@
-export type User = {id:number; login:string; role:'student'|'admin'; displayName:string}
+export type User = {id:number; login:string; role:'student'|'admin'; displayName:string;firstName:string;lastName:string;avatar:string}
 export type Interval = {startTime:string; endTime:string}
 export type Room = {id:number; name:string; building:string; floor:number; capacity:number; equipment:string[]; description:string; active:boolean; busySlots?:Interval[]; freeSlots?:Interval[]}
 export type Booking = Interval & {id:number; held?:boolean; checkedIn?:boolean;attendance?:{state:string;deadline:string;reason?:string};warnings?:string[]; roomId:number; userId:number; date:string; status:'active'|'cancelled'; comment:string; room:Room; user:User}

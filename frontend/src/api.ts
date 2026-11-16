@@ -10,7 +10,7 @@ export async function api<T>(path:string, init:RequestInit = {}):Promise<T> {
   catch {throw new ApiError('Нет связи с сервером. Проверьте подключение и повторите попытку.', 0, 'NETWORK')}
   if (!response.ok) {
     const data = await response.json().catch(()=>({}))
-    if(response.status===401 && !['/auth/login','/auth/register'].includes(path)) window.dispatchEvent(new Event('session-expired'))
+    if(response.status===401 && token===getToken() && !['/auth/login','/auth/register'].includes(path)) window.dispatchEvent(new Event('session-expired'))
     throw new ApiError(data.error?.message || 'Не удалось выполнить запрос. Попробуйте ещё раз.', response.status, data.error?.code || 'ERROR')
   }
   return response.json()

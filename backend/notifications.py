@@ -8,7 +8,7 @@ import secrets
 import urllib.request
 from datetime import timedelta
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Query
 from pydantic import Field
 from sqlalchemy import select
 
@@ -70,8 +70,17 @@ def install(app, sessions, current_user, fail, secret):
     def settings(user=Depends(current_user)):
         with sessions() as session:
             p = profile(session, user.id)
-            deliveries = [{'id': m.id, 'subject': m.data['subject'], 'state': m.data['state'], 'error': m.data.get('error', ''), 'nextAttempt': m.data.get('nextAttempt')} for m in session.scalars(select(Plan).where(Plan.kind == 'outbox', Plan.user_id == user.id).order_by(Plan.id.desc()).limit(20))]
+            deliveries = [{'id': m.id, 'subject': m.data['subject'], 'state': m.data['state'], 'error': m.data.get('error', ''), 'nextAttempt': m.data.get('nextAttempt'), 'createdAt':m.data.get('createdAt'), 'sentAt':m.data.get('sentAt')} for m in session.scalars(select(Plan).where(Plan.kind == 'outbox', Plan.user_id == user.id).order_by(Plan.id.desc()).limit(20))]
             return {'provider': provider(), 'deliveries': deliveries, 'configured': configured(), 'email': p.data.get('email', '') if p else '', 'verified': bool(p and p.data.get('verified')), 'preferences': p.data.get('preferences', {}) if p else {}}
+
+    @app.get('/api/email/history', tags=['Email'])
+    def history(before: int | None = Query(default=None,gt=0), user=Depends(current_user)):
+        with sessions() as session:
+            query=select(Plan).where(Plan.kind=='outbox',Plan.user_id==user.id)
+            if before:
+                query=query.where(Plan.id<before)
+            rows=list(session.scalars(query.order_by(Plan.id.desc()).limit(51)))
+            return {'items':[{'id':m.id,'subject':m.data['subject'],'state':m.data['state'],'error':m.data.get('error',''),'createdAt':m.data.get('createdAt'),'sentAt':m.data.get('sentAt')} for m in rows[:50]],'hasMore':len(rows)>50}
 
     @app.put('/api/email', tags=['Email'])
     def save(data: Preferences, user=Depends(current_user)):
@@ -164,6 +173,7 @@ def install(app, sessions, current_user, fail, secret):
             try:
                 send(d, token)
                 d['state'] = 'sent'
+                d['sentAt'] = campus_now().isoformat()
                 d.pop('error', None)
                 d.pop('nextAttempt', None)
                 sent += 1

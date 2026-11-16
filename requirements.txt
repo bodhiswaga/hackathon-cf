@@ -7,3 +7,5 @@ pydantic==2.14.3
 tzdata==2026.6
 alembic==1.20.1
 -c requirements.lock
+
+Pillow==13.0.0
