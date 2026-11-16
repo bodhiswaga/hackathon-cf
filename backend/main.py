@@ -347,7 +347,7 @@ def create_app(database_url=None, secret=None):
 
     def booking_json(session, booking):
         held = any(p.data.get('state') == 'offered' and p.data.get('bookingId') == booking.id for p in session.scalars(select(Plan).where(Plan.user_id == booking.user_id, Plan.kind == 'queue')))
-        return {'id': booking.id, 'checkedIn': booking.checked_in, 'requirements': booking.requirements, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
+        return {'id': booking.id, 'warnings':[p.data['reason'] for p in restrictions(session,booking.room_id,booking.date) if p.data['startTime']<booking.end_time and p.data['endTime']>booking.start_time and (not p.data['equipment'] or set(p.data['equipment']) & set(booking.requirements))], 'checkedIn': booking.checked_in, 'requirements': booking.requirements, 'held': held, 'roomId': booking.room_id, 'userId': booking.user_id, 'date': booking.date.isoformat(), 'startTime': booking.start_time, 'endTime': booking.end_time, 'status': booking.status, 'comment': booking.comment, 'room': room_json(session.get(Room, booking.room_id)), 'user': user_json(session.get(User, booking.user_id))}
 
     def lock_room(session, room_id):
         # A separate write session starts before any reads, including authentication.

@@ -181,6 +181,10 @@ docker compose --env-file .env.production -f compose.production.yaml -p campusfl
 | `GET /series`, `POST /series/{id}/rsvp` | Общие встречи и ответы участников |
 | `GET /email`, `PUT /email`, `POST /email/verify` | Почта и подтверждение адреса |
 | `POST /jobs/notifications` | Доставка и напоминания; отдельный секрет cron |
+| `GET /booking-policy`, `PUT /admin/booking-policy` | Квоты и правила (изменение — только admin) |
+| `GET /public/rooms/{id}` | Занятость на сегодня без персональных данных |
+| `POST /bookings/{id}/check-in`, `PATCH /bookings/{id}/end-time` | Начало и окончание текущей встречи владельца |
+| `GET/POST /admin/restrictions`, `POST /admin/restrictions/preview`, `DELETE /admin/restrictions/{id}` | Временные ограничения и предварительная проверка |
 | `GET /health` | Проверка приложения и БД |
 
 Для защищённых запросов передавайте `Authorization: Bearer <accessToken>`; токен возвращает вход. Данные — JSON, дата — `YYYY-MM-DD`, время — `HH:MM`. Успешное создание брони возвращает 201, конфликт — 409 `BOOKING_CONFLICT`, обращение к чужой брони — 403 `FORBIDDEN`. Отмена сохраняет запись в истории.
