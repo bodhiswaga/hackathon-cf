@@ -1,12 +1,37 @@
 import {useEffect,useState} from 'react'
 import {api} from '../api'
+import {ArrowLeft, Check, Mail, TriangleAlert} from 'lucide-react'
+import {Brand} from './Sidebar'
+import ThemeToggle from './ThemeToggle'
 type Delivery={id:number;subject:string;state:string;error:string;nextAttempt?:string}
 const states:Record<string,string>={pending:'В очереди',processing:'Отправляется',sent:'Передано отправителю',failed:'Ошибка отправки',skipped:'Уже неактуально'}
 type Settings={deliveries?:Delivery[];configured:boolean;email:string;verified:boolean;preferences:Record<string,boolean>}
 const labels:Record<string,string>={meeting:'Встречи, отмены и переносы',team:'Вступление в команду',queue:'Предложения из очереди',reminder:'Напоминание за час'}
 export function VerifyEmail({token}:{token:string}){
- const [message,setMessage]=useState('Нажмите кнопку для подтверждения адреса.'),[busy,setBusy]=useState(false)
- return <main className="shared-meeting"><h1>Подтверждение email</h1><p role="status">{message}</p><button className="primary" disabled={busy} onClick={async()=>{setBusy(true);try{await api('/email/verify',{method:'POST',body:JSON.stringify({token})});setMessage('Email подтверждён. Можно вернуться в приложение.')}catch(e){setMessage((e as Error).message)}finally{setBusy(false)}}}>Подтвердить</button><p><a href="/">Вернуться в CampusFlow</a></p></main>
+ const [state,setState]=useState<'ready'|'pending'|'success'|'error'>(token?'ready':'error')
+ const [error,setError]=useState(token?'':'В ссылке нет кода подтверждения. Открой полную ссылку из письма или запроси новое письмо в профиле.')
+ const success=state==='success'
+ const Icon=success?Check:state==='error'?TriangleAlert:Mail
+ async function confirm(){
+  if(state==='pending'||success||!token)return
+  setState('pending');setError('')
+  try{await api('/email/verify',{method:'POST',body:JSON.stringify({token})});setState('success')}
+  catch(e){setError((e as Error).message);setState('error')}
+ }
+ return <div className="verification-page">
+  <header className="verification-header"><a href="/" aria-label="CampusFlow — на главную"><Brand/></a><ThemeToggle/></header>
+  <main className="verification-main"><section className="verification-card" aria-labelledby="verification-title" aria-busy={state==='pending'}>
+   <span className={`verification-icon ${success?'is-success':''}`} aria-hidden="true"><Icon size={26} strokeWidth={1.7}/></span>
+   <div className="page-kicker">Почтовые уведомления</div>
+   <h1 id="verification-title">{success?'Email подтверждён':'Подтверди свой email'}</h1>
+   <p className="verification-description">{success?'Теперь ты сможешь получать уведомления о встречах и изменениях бронирований.':'Подтверди адрес, чтобы получать выбранные уведомления CampusFlow.'}</p>
+   {error&&<p className="verification-error" role="alert">{error}</p>}
+   {success?<a href="/" className="primary">Открыть CampusFlow</a>:<button className="primary" disabled={state==='pending'||!token} onClick={()=>void confirm()}>{state==='pending'?'Подтверждаем…':state==='error'&&token?'Попробовать снова':'Подтвердить email'}</button>}
+   {!success&&<a className="verification-back" href="/"><ArrowLeft size={15}/>Вернуться в приложение</a>}
+   <p className="verification-footnote" role={success?'status':undefined}>{success?'Настройки уведомлений доступны в профиле.':'Ссылка одноразовая и действует один час.'}</p>
+  </section></main>
+  <footer className="verification-footer">CampusFlow · Пространство для твоих планов</footer>
+ </div>
 }
 export default function EmailSettings(){
  const [settings,setSettings]=useState<Settings|null>(null),[email,setEmail]=useState(''),[prefs,setPrefs]=useState<Record<string,boolean>>({meeting:true,team:true,queue:true,reminder:true}),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false)

@@ -501,6 +501,8 @@ def create_app(database_url=None, secret=None):
         def spa(path: str):
             if path == 'theme.js':
                 return FileResponse(frontend / 'theme.js')
+            if path == 'favicon.svg':
+                return FileResponse(frontend / 'favicon.svg', media_type='image/svg+xml')
             if path.startswith(('api/', 'assets/')) or path in ('docs', 'redoc', 'openapi.json'):
                 fail(404, 'NOT_FOUND', 'Страница не найдена.')
             return FileResponse(frontend / 'index.html')
