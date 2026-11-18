@@ -44,6 +44,17 @@
 
 
 /* Paper, sand and charcoal */
+.booking-attendance-hint {
+  margin: 0 24px 14px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .booking-attendance-hint {
+    margin-inline: 20px;
+  }
+}
+
 :root {
   --sidebar-bg: #dbbd95;
   --panel-wash: rgb(255 248 233 / 62%);
