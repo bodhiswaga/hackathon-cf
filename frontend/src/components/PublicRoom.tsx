@@ -6,7 +6,7 @@ import {roomName} from '../utils'
 type Data={room:Room;date:string;now:string;freeSlots:Interval[];restrictions:{startTime:string;endTime:string;equipment:string[]}[]}
 export function RoomQr({room}:{room:Room}){
  const [image,setImage]=useState(''),[error,setError]=useState('');const url=location.origin+'/#room='+room.id
- useEffect(()=>{let active=true;QRCode.toDataURL(url,{width:240,margin:2,color:{dark:'#244C43',light:'#FFFFFF'}}).then(v=>{if(active)setImage(v)}).catch(()=>{if(active)setError('Не удалось создать QR-код.')});return()=>{active=false}},[url])
+ useEffect(()=>{let active=true;QRCode.toDataURL(url,{width:240,margin:2,color:{dark:'#292421',light:'#FFFFFF'}}).then(v=>{if(active)setImage(v)}).catch(()=>{if(active)setError('Не удалось создать QR-код.')});return()=>{active=false}},[url])
  return <details><summary>QR-код аудитории</summary>{image&&<a href={image} download={'campusflow-'+room.id+'.png'}><img width={180} height={180} src={image} alt={'Скачать QR-код '+roomName(room)}/></a>}{error&&<p>{error}</p>}<p><a href={url} target="_blank" rel="noreferrer">Открыть страницу аудитории</a></p></details>
 }
 export default function PublicRoom({id}:{id:string}){

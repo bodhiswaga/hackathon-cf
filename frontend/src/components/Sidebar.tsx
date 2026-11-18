@@ -17,4 +17,13 @@ export default function Sidebar({user,page,onNavigate,onLogout}:{user:User;page:
   <nav aria-label="Основная навигация">{sections.map(section=><div className="nav-group" key={section.title}><p>{section.title}</p>{section.items.map(item=><button key={item.id} className={`nav-item ${page===item.id?'active':''}`} aria-current={page===item.id?'page':undefined} onClick={()=>{onNavigate(item.id);setOpen(false)}}><item.icon size={19}/><span>{item.title}</span>{page===item.id&&<ChevronRight size={15}/>}</button>)}</div>)}</nav>
   <div className="sidebar-bottom"><div className="campus-label"><span className="campus-marker"><MapPin size={17}/></span><div>Университетский кампус<small>Екатеринбург</small></div></div><div className="campus-hours"><span className="status-dot"/>Кампус открыт с 08:00 до 22:00<small>Время Екатеринбурга, UTC+5</small></div><div className="profile"><button className={`profile-link ${page==='account'?'active':''}`} aria-label={`Открыть профиль: ${user.displayName}`} aria-current={page==='account'?'page':undefined} title="Настройки профиля" onClick={()=>{onNavigate('account');setOpen(false)}}><Avatar user={user}/><span className="profile-identity"><strong>{user.displayName}</strong><small>{user.role==='admin'?'Администратор':'Студент'}</small></span><ChevronRight size={15} aria-hidden="true"/></button><button className="icon-button" aria-label="Выйти из аккаунта" title="Выйти" onClick={onLogout}><LogOut size={18}/></button></div></div></aside></>
 }
-export function Brand(){return <div className="brand"><span className="brand-mark"><i/><i/><i/></span><span>Campus<span className="brand-light">Flow</span><small>Пространство для твоих планов</small></span></div>}
+export function Brand() {
+  return (
+    <div className="brand">
+      <svg className="brand-mark" viewBox="0 0 64 64" fill="currentColor" aria-hidden="true" focusable="false">
+        <path fillRule="evenodd" d="M9 53V16Q9 8 17 8H52V53H44V16H17V53ZM21 20L39 15V49L21 55Z"/>
+      </svg>
+      <span>Campus<span className="brand-light">Flow</span><small>Пространство для твоих планов</small></span>
+    </div>
+  )
+}

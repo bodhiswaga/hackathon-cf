@@ -1,8 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="15" fill="#244c43"/>
-  <g transform="translate(13 14) skewY(-7)">
-    <rect y="14" width="10" height="28" rx="2.5" fill="#f5f6f2"/>
-    <rect x="14" y="2" width="10" height="40" rx="2.5" fill="#f5f6f2"/>
-    <rect x="28" y="10" width="10" height="32" rx="2.5" fill="#e6c56a"/>
-  </g>
+  <rect width="64" height="64" rx="12" fill="#292421"/>
+  <path fill="#e8c79f" fill-rule="evenodd" d="M9 53V16Q9 8 17 8H52V53H44V16H17V53ZM21 20L39 15V49L21 55Z"/>
 </svg>
