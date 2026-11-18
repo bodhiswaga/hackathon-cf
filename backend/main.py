@@ -548,13 +548,15 @@ def create_app(database_url=None, secret=None):
         app.mount('/assets', StaticFiles(directory=frontend / 'assets'), name='assets')
         @app.get('/{path:path}', include_in_schema=False)
         def spa(path: str):
+            # These stable URLs select the current release's fingerprinted assets.
+            headers = {'Cache-Control': 'no-store'}
             if path == 'theme.js':
-                return FileResponse(frontend / 'theme.js')
+                return FileResponse(frontend / 'theme.js', headers=headers)
             if path == 'favicon.svg':
-                return FileResponse(frontend / 'favicon.svg', media_type='image/svg+xml')
+                return FileResponse(frontend / 'favicon.svg', media_type='image/svg+xml', headers=headers)
             if path.startswith(('api/', 'assets/')) or path in ('docs', 'redoc', 'openapi.json'):
                 fail(404, 'NOT_FOUND', 'Страница не найдена.')
-            return FileResponse(frontend / 'index.html')
+            return FileResponse(frontend / 'index.html', headers=headers)
     return app
 
 
