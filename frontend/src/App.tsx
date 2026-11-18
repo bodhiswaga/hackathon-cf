@@ -24,7 +24,16 @@ export default function App(){
  const verificationPage=hashParams.has('verify-email')
  const verificationToken=hashParams.get('verify-email')||''
  const meetingToken=hashParams.get('meeting')
- function navigate(nextPage:Page){if(nextPage===page)return;if(document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){document.startViewTransition(()=>flushSync(()=>setPage(nextPage)))}else setPage(nextPage)}
+ function navigate(nextPage: Page) {
+   if (nextPage === page) return
+   if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+     setPage(nextPage)
+     return
+   }
+   const transition = document.startViewTransition(() => flushSync(() => setPage(nextPage)))
+   // A resize or overlapping navigation can skip the animation without cancelling the route update.
+   void transition.ready.catch(() => {})
+ }
  const [user,setUser]=useState<User|null>(null),[meta,setMeta]=useState<Meta|null>(null),[booting,setBooting]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[revision,setRevision]=useState(0),[page,setPage]=useState<Page>('search')
  useEffect(()=>{let active=true;setError('');setBooting(true);Promise.all([api<Meta>('/meta'),getToken()?api<User>('/auth/me'):Promise.resolve(null)]).then(([m,u])=>{if(active){setMeta(m);setUser(u);if(u){remember({user:u,accessToken:getToken()!});setPage(u.role==='admin'?'admin-bookings':location.hash.includes('team=')?'community':'search')}}}).catch(e=>{if(active){if(e.status===401){saveToken(null);setNotice('Сессия истекла. Войди снова.')}else setError(e.message)}}).finally(()=>{if(active)setBooting(false)});return()=>{active=false}},[revision])
  useEffect(()=>{const expired=()=>{saveToken(null);setUser(null);setNotice('Сессия истекла. Войди снова, чтобы продолжить.')};window.addEventListener('session-expired',expired);return()=>window.removeEventListener('session-expired',expired)},[])

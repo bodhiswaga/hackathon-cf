@@ -85,3 +85,15 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
 }
+
+@media (max-width: 760px) {
+  .replacement-notice {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .replacement-notice > .secondary {
+    max-width: 100%;
+    white-space: normal;
+    font-size: 13px;
+  }
+}
